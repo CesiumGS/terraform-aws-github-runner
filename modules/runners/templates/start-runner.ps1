@@ -101,11 +101,7 @@ Write-Host "Starting the runner as user $run_as"
 $jsonBody = @(
     @{
         group='Runner Image'
-        detail="AMI id: $ami_id"
-    }
-    @{
-        group='Runner EC2 Instance Type'
-        detail=$ec2_instance_type
+        detail="AMI id: $ami_id`nInstance Type: $ec2_instance_type"
     }
 )
 ConvertTo-Json -InputObject $jsonBody | Set-Content -Path "$pwd\.setup_info"
