@@ -5,6 +5,7 @@ Write-Host  "Retrieving TOKEN from AWS API"
 $token=Invoke-RestMethod -Method PUT -Uri "http://169.254.169.254/latest/api/token" -Headers @{"X-aws-ec2-metadata-token-ttl-seconds" = "180"}
 
 $ami_id=Invoke-RestMethod -Uri "http://169.254.169.254/latest/meta-data/ami-id" -Headers @{"X-aws-ec2-metadata-token" = $token}
+$ec2_instance_type=Invoke-RestMethod -Uri "http://169.254.169.254/latest/meta-data/instance-type" -Headers @{"X-aws-ec2-metadata-token" = $token}
 
 $metadata=Invoke-RestMethod -Uri "http://169.254.169.254/latest/dynamic/instance-identity/document" -Headers @{"X-aws-ec2-metadata-token" = $token}
 
@@ -101,6 +102,10 @@ $jsonBody = @(
     @{
         group='Runner Image'
         detail="AMI id: $ami_id"
+    }
+    @{
+        group='Runner EC2 Instance Type'
+        detail=$ec2_instance_type
     }
 )
 ConvertTo-Json -InputObject $jsonBody | Set-Content -Path "$pwd\.setup_info"
