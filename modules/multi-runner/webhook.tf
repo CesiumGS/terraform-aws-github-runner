@@ -19,6 +19,7 @@ module "webhook" {
   lambda_architecture                           = var.lambda_architecture
   lambda_zip                                    = var.webhook_lambda_zip
   lambda_timeout                                = var.webhook_lambda_timeout
+  lambda_tracing_mode                           = var.lambda_tracing_mode
   logging_retention_in_days                     = var.logging_retention_in_days
   logging_kms_key_id                            = var.logging_kms_key_id
 
@@ -30,6 +31,5 @@ module "webhook" {
   lambda_security_group_ids = var.lambda_security_group_ids
   aws_partition             = var.aws_partition
 
-  log_type  = var.log_type
   log_level = var.log_level
 }

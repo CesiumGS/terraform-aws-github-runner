@@ -29,6 +29,7 @@ module "runners" {
   ami_filter                = each.value.runner_config.ami_filter
   ami_owners                = each.value.runner_config.ami_owners
   ami_id_ssm_parameter_name = each.value.runner_config.ami_id_ssm_parameter_name
+  ami_kms_key_arn           = each.value.runner_config.ami_kms_key_arn
 
   sqs_build_queue                      = { "arn" : each.value.arn }
   github_app_parameters                = local.github_app_parameters
@@ -50,6 +51,7 @@ module "runners" {
   egress_rules                         = var.runner_egress_rules
   runner_additional_security_group_ids = var.runner_additional_security_group_ids
   metadata_options                     = each.value.runner_config.runner_metadata_options
+  credit_specification                 = each.value.runner_config.credit_specification
 
   enable_runner_binaries_syncer    = each.value.runner_config.enable_runner_binaries_syncer
   lambda_s3_bucket                 = var.lambda_s3_bucket
@@ -62,12 +64,14 @@ module "runners" {
   lambda_timeout_scale_down        = var.runners_scale_down_lambda_timeout
   lambda_subnet_ids                = var.lambda_subnet_ids
   lambda_security_group_ids        = var.lambda_security_group_ids
+  lambda_tracing_mode              = var.lambda_tracing_mode
   logging_retention_in_days        = var.logging_retention_in_days
   logging_kms_key_id               = var.logging_kms_key_id
   enable_cloudwatch_agent          = each.value.runner_config.enable_cloudwatch_agent
   cloudwatch_config                = var.cloudwatch_config
   runner_log_files                 = each.value.runner_config.runner_log_files
   runner_group_name                = each.value.runner_config.runner_group_name
+  runner_name_prefix               = each.value.runner_config.runner_name_prefix
 
   scale_up_reserved_concurrent_executions = each.value.runner_config.scale_up_reserved_concurrent_executions
 
@@ -91,7 +95,6 @@ module "runners" {
 
   kms_key_arn = var.kms_key_arn
 
-  log_type  = var.log_type
   log_level = var.log_level
 
   pool_config                                = each.value.runner_config.pool_config

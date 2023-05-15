@@ -25,13 +25,14 @@ resource "aws_lambda_function" "scale_down" {
       ENVIRONMENT                          = var.prefix
       GHES_URL                             = var.ghes_url
       LOG_LEVEL                            = var.log_level
-      LOG_TYPE                             = var.log_type
       MINIMUM_RUNNING_TIME_IN_MINUTES      = coalesce(var.minimum_running_time_in_minutes, local.min_runtime_defaults[var.runner_os])
       NODE_TLS_REJECT_UNAUTHORIZED         = var.ghes_url != null && !var.ghes_ssl_verify ? 0 : 1
       PARAMETER_GITHUB_APP_ID_NAME         = var.github_app_parameters.id.name
       PARAMETER_GITHUB_APP_KEY_BASE64_NAME = var.github_app_parameters.key_base64.name
+      POWERTOOLS_LOGGER_LOG_EVENT          = var.log_level == "debug" ? "true" : "false"
       RUNNER_BOOT_TIME_IN_MINUTES          = var.runner_boot_time_in_minutes
       SCALE_DOWN_CONFIG                    = jsonencode(var.idle_config)
+      SERVICE_NAME                         = "runners-scale-up"
     }
   }
 
@@ -40,6 +41,13 @@ resource "aws_lambda_function" "scale_down" {
     content {
       security_group_ids = var.lambda_security_group_ids
       subnet_ids         = var.lambda_subnet_ids
+    }
+  }
+
+  dynamic "tracing_config" {
+    for_each = var.lambda_tracing_mode != null ? [true] : []
+    content {
+      mode = var.lambda_tracing_mode
     }
   }
 }
@@ -108,4 +116,10 @@ resource "aws_iam_role_policy_attachment" "scale_down_vpc_execution_role" {
   count      = length(var.lambda_subnet_ids) > 0 ? 1 : 0
   role       = aws_iam_role.scale_down.name
   policy_arn = "arn:${var.aws_partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy" "scale_down_xray" {
+  count  = var.lambda_tracing_mode != null ? 1 : 0
+  policy = data.aws_iam_policy_document.lambda_xray[0].json
+  role   = aws_iam_role.scale_down.name
 }

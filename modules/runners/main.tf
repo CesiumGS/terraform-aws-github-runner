@@ -13,11 +13,10 @@ locals {
   name_runner                     = var.overrides["name_runner"] == "" ? local.tags["Name"] : var.overrides["name_runner"]
   role_path                       = var.role_path == null ? "/${var.prefix}/" : var.role_path
   instance_profile_path           = var.instance_profile_path == null ? "/${var.prefix}/" : var.instance_profile_path
-  lambda_zip                      = var.lambda_zip == null ? "${path.module}/lambdas/runners/runners.zip" : var.lambda_zip
+  lambda_zip                      = var.lambda_zip == null ? "${path.module}/../../lambdas/functions/control-plane/runners.zip" : var.lambda_zip
   userdata_template               = var.userdata_template == null ? local.default_userdata_template[var.runner_os] : var.userdata_template
   kms_key_arn                     = var.kms_key_arn != null ? var.kms_key_arn : ""
   s3_location_runner_distribution = var.enable_runner_binaries_syncer ? "s3://${var.s3_runner_binaries.id}/${var.s3_runner_binaries.key}" : ""
-
   default_ami = {
     "windows" = { name = ["Windows_Server-2022-English-Core-ContainersLatest-*"] }
     "linux"   = var.runner_architecture == "arm64" ? { name = ["amzn2-ami-kernel-5.*-hvm-*-arm64-gp2"] } : { name = ["amzn2-ami-kernel-5.*-hvm-*-x86_64-gp2"] }
@@ -38,7 +37,8 @@ locals {
     "linux"   = "${path.module}/templates/start-runner.sh"
   }
 
-  ami_filter = coalesce(var.ami_filter, local.default_ami[var.runner_os])
+  ami_kms_key_arn = var.ami_kms_key_arn != null ? var.ami_kms_key_arn : ""
+  ami_filter      = coalesce(var.ami_filter, local.default_ami[var.runner_os])
 
   enable_job_queued_check = var.enable_job_queued_check == null ? !var.enable_ephemeral_runners : var.enable_job_queued_check
 }
@@ -97,6 +97,13 @@ resource "aws_launch_template" "runner" {
     }
   }
 
+  dynamic "credit_specification" {
+    for_each = var.credit_specification != null ? [var.credit_specification] : []
+    content {
+      cpu_credits = credit_specification.value
+    }
+  }
+
   monitoring {
     enabled = var.enable_runner_detailed_monitoring
   }
@@ -121,6 +128,9 @@ resource "aws_launch_template" "runner" {
       {
         "Name" = format("%s", local.name_runner)
       },
+      {
+        "ghr:runner_name_prefix" = var.runner_name_prefix
+      },
       var.runner_ec2_tags
     )
   }
@@ -132,6 +142,10 @@ resource "aws_launch_template" "runner" {
       {
         "Name" = format("%s", local.name_runner)
       },
+      {
+        "ghr:runner_name_prefix" = var.runner_name_prefix
+      },
+      var.runner_ec2_tags
     )
   }
 
@@ -143,8 +157,10 @@ resource "aws_launch_template" "runner" {
       S3_LOCATION_RUNNER_DISTRIBUTION = local.s3_location_runner_distribution
       RUNNER_ARCHITECTURE             = var.runner_architecture
     })
-    post_install    = var.userdata_post_install
-    start_runner    = templatefile(local.userdata_start_runner[var.runner_os], {})
+    post_install = var.userdata_post_install
+    start_runner = templatefile(local.userdata_start_runner[var.runner_os], {
+      metadata_tags = var.metadata_options != null ? var.metadata_options.instance_metadata_tags : "enabled"
+    })
     ghes_url        = var.ghes_url
     ghes_ssl_verify = var.ghes_ssl_verify
 

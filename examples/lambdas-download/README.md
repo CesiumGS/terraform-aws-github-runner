@@ -7,7 +7,7 @@ terraform init
 terraform apply -var=module_version=<VERSION>
 ```
 
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+<!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
@@ -39,4 +39,4 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_files"></a> [files](#output\_files) | n/a |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+<!-- END_TF_DOCS -->
