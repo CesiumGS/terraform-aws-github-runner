@@ -25,7 +25,6 @@ const LAUNCH_TEMPLATE = 'lt-1';
 const ORG_NAME = 'SomeAwesomeCoder';
 const REPO_NAME = `${ORG_NAME}/some-amazing-library`;
 const ENVIRONMENT = 'unit-test-environment';
-const SSM_TOKEN_PATH = '/github-action-runners/default/runners/tokens';
 const RUNNER_NAME_PREFIX = '';
 const RUNNER_TYPES: RunnerType[] = ['Repo', 'Org'];
 
@@ -42,8 +41,8 @@ const mockRunningInstances: DescribeInstancesResult = {
             { Key: 'ghr:Application', Value: 'github-action-runner' },
             { Key: 'ghr:runner_name_prefix', Value: RUNNER_NAME_PREFIX },
             { Key: 'ghr:created_by', Value: 'scale-up-lambda' },
-            { Key: 'Type', Value: 'Org' },
-            { Key: 'Owner', Value: 'CoderToCat' },
+            { Key: 'ghr:Type', Value: 'Org' },
+            { Key: 'ghr:Owner', Value: 'CoderToCat' },
           ],
         },
       ],
@@ -59,7 +58,6 @@ describe('list instances', () => {
 
   it('returns a list of instances', async () => {
     mockEC2Client.on(DescribeInstancesCommand).resolves(mockRunningInstances);
-    // mockDescribeInstances.promise.mockReturnValue(mockRunningInstances);
     const resp = await listEC2Runners();
     expect(resp.length).toBe(1);
     expect(resp).toContainEqual({
@@ -82,8 +80,8 @@ describe('list instances', () => {
     expect(mockEC2Client).toHaveReceivedCommandWith(DescribeInstancesCommand, {
       Filters: [
         { Name: 'instance-state-name', Values: ['running', 'pending'] },
-        { Name: 'tag:Type', Values: ['Repo'] },
-        { Name: 'tag:Owner', Values: [REPO_NAME] },
+        { Name: 'tag:ghr:Type', Values: ['Repo'] },
+        { Name: 'tag:ghr:Owner', Values: [REPO_NAME] },
         { Name: 'tag:ghr:Application', Values: ['github-action-runner'] },
       ],
     });
@@ -95,8 +93,8 @@ describe('list instances', () => {
     expect(mockEC2Client).toHaveReceivedCommandWith(DescribeInstancesCommand, {
       Filters: [
         { Name: 'instance-state-name', Values: ['running', 'pending'] },
-        { Name: 'tag:Type', Values: ['Org'] },
-        { Name: 'tag:Owner', Values: [ORG_NAME] },
+        { Name: 'tag:ghr:Type', Values: ['Org'] },
+        { Name: 'tag:ghr:Owner', Values: [ORG_NAME] },
         { Name: 'tag:ghr:Application', Values: ['github-action-runner'] },
       ],
     });
@@ -181,7 +179,6 @@ describe('create runner', () => {
 
     //mockEC2.createFleet.mockImplementation(() => mockCreateFleet);
     mockEC2Client.on(CreateFleetCommand).resolves({ Instances: [{ InstanceIds: ['i-1234'] }] });
-    mockSSMClient.on(PutParameterCommand).resolves({});
     mockSSMClient.on(GetParameterCommand).resolves({});
   });
 
@@ -191,7 +188,6 @@ describe('create runner', () => {
     expect(mockEC2Client).toHaveReceivedCommandWith(CreateFleetCommand, {
       ...expectedCreateFleetRequest({ ...defaultExpectedFleetRequestValues, type: type }),
     });
-    expect(mockSSMClient).toHaveReceivedCommandTimes(PutParameterCommand, 1);
   });
 
   it('calls create fleet of 2 instances with the correct config for org ', async () => {
@@ -204,83 +200,6 @@ describe('create runner', () => {
     expect(mockEC2Client).toHaveReceivedCommandWith(CreateFleetCommand, {
       ...expectedCreateFleetRequest({ ...defaultExpectedFleetRequestValues, totalTargetCapacity: 2 }),
     });
-    expect(mockSSMClient).toHaveReceivedCommandTimes(PutParameterCommand, 2);
-
-    for (const instance of instances[0].InstanceIds) {
-      expect(mockSSMClient).toHaveReceivedCommandWith(PutParameterCommand, {
-        Name: `${SSM_TOKEN_PATH}/${instance}`,
-        Type: 'SecureString',
-        Value: '--token foo --url http://github.com',
-      });
-    }
-  });
-
-  it('calls create fleet of 40 instances (ssm rate limit condition) to test time delay ', async () => {
-    const startTime = performance.now();
-    const instances = [
-      {
-        InstanceIds: [
-          'i-1234',
-          'i-5678',
-          'i-5567',
-          'i-5569',
-          'i-5561',
-          'i-5560',
-          'i-5566',
-          'i-5536',
-          'i-5526',
-          'i-5516',
-          'i-122',
-          'i-123',
-          'i-124',
-          'i-125',
-          'i-126',
-          'i-127',
-          'i-128',
-          'i-129',
-          'i-130',
-          'i-131',
-          'i-132',
-          'i-133',
-          'i-134',
-          'i-135',
-          'i-136',
-          'i-137',
-          'i-138',
-          'i-139',
-          'i-140',
-          'i-141',
-          'i-142',
-          'i-143',
-          'i-144',
-          'i-145',
-          'i-146',
-          'i-147',
-          'i-148',
-          'i-149',
-          'i-150',
-          'i-151',
-        ],
-      },
-    ];
-    mockEC2Client.on(CreateFleetCommand).resolves({ Instances: instances });
-
-    await createRunner({ ...createRunnerConfig(defaultRunnerConfig), numberOfRunners: 40 });
-    const endTime = performance.now();
-
-    expect(endTime - startTime).toBeGreaterThan(1000);
-    expect(mockEC2Client).toHaveReceivedCommandWith(
-      CreateFleetCommand,
-      expectedCreateFleetRequest({ ...defaultExpectedFleetRequestValues, totalTargetCapacity: 40 }),
-    );
-    expect(mockSSMClient).toHaveReceivedCommandTimes(PutParameterCommand, 40);
-    for (const instance of instances[0].InstanceIds) {
-      expect(mockSSMClient).toHaveReceivedCommandWith(PutParameterCommand, {
-        Name: `${SSM_TOKEN_PATH}/${instance}`,
-        Type: 'SecureString',
-        Value: '--token foo --url http://github.com',
-      });
-    }
   });
 
   it('calls create fleet of 1 instance with the on-demand capacity', async () => {
@@ -288,22 +207,12 @@ describe('create runner', () => {
     expect(mockEC2Client).toHaveReceivedCommandWith(CreateFleetCommand, {
       ...expectedCreateFleetRequest({ ...defaultExpectedFleetRequestValues, capacityType: 'on-demand' }),
     });
-    expect(mockSSMClient).toHaveReceivedCommandTimes(PutParameterCommand, 1);
   });
 
   it('calls run instances with the on-demand capacity', async () => {
     await createRunner(createRunnerConfig({ ...defaultRunnerConfig, maxSpotPrice: '0.1' }));
     expect(mockEC2Client).toHaveReceivedCommandWith(CreateFleetCommand, {
       ...expectedCreateFleetRequest({ ...defaultExpectedFleetRequestValues, maxSpotPrice: '0.1' }),
-    });
-  });
-
-  it('creates ssm parameters for each created instance', async () => {
-    await createRunner(createRunnerConfig(defaultRunnerConfig));
-    expect(mockSSMClient).toHaveReceivedCommandWith(PutParameterCommand, {
-      Name: `${SSM_TOKEN_PATH}/i-1234`,
-      Type: 'SecureString',
-      Value: '--token foo --url http://github.com',
     });
   });
 
@@ -392,7 +301,6 @@ describe('create runner with errors', () => {
       CreateFleetCommand,
       expectedCreateFleetRequest(defaultExpectedFleetRequestValues),
     );
-    expect(mockSSMClient).toHaveReceivedCommand(PutParameterCommand);
   });
 
   it('test error by create fleet call is thrown.', async () => {
@@ -446,11 +354,9 @@ interface RunnerConfig {
 
 function createRunnerConfig(runnerConfig: RunnerConfig): RunnerInputParameters {
   return {
-    runnerServiceConfig: ['--token foo', '--url http://github.com'],
     environment: ENVIRONMENT,
     runnerType: runnerConfig.type,
     runnerOwner: REPO_NAME,
-    ssmTokenPath: SSM_TOKEN_PATH,
     launchTemplateName: LAUNCH_TEMPLATE,
     ec2instanceCriteria: {
       instanceTypes: ['m5.large', 'c5.large'],
@@ -473,6 +379,12 @@ interface ExpectedFleetRequestValues {
 }
 
 function expectedCreateFleetRequest(expectedValues: ExpectedFleetRequestValues): CreateFleetCommandInput {
+  const tags = [
+    { Key: 'ghr:Application', Value: 'github-action-runner' },
+    { Key: 'ghr:created_by', Value: expectedValues.totalTargetCapacity > 1 ? 'pool-lambda' : 'scale-up-lambda' },
+    { Key: 'ghr:Type', Value: expectedValues.type },
+    { Key: 'ghr:Owner', Value: REPO_NAME },
+  ];
   const request: CreateFleetCommandInput = {
     LaunchTemplateConfigs: [
       {
@@ -507,12 +419,11 @@ function expectedCreateFleetRequest(expectedValues: ExpectedFleetRequestValues):
     TagSpecifications: [
       {
         ResourceType: 'instance',
-        Tags: [
-          { Key: 'ghr:Application', Value: 'github-action-runner' },
-          { Key: 'ghr:created_by', Value: expectedValues.totalTargetCapacity > 1 ? 'pool-lambda' : 'scale-up-lambda' },
-          { Key: 'Type', Value: expectedValues.type },
-          { Key: 'Owner', Value: REPO_NAME },
-        ],
+        Tags: tags,
+      },
+      {
+        ResourceType: 'volume',
+        Tags: tags,
       },
     ],
     TargetCapacitySpecification: {

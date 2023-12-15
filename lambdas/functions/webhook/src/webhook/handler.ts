@@ -1,7 +1,7 @@
 import { Webhooks } from '@octokit/webhooks';
 import { CheckRunEvent, WorkflowJobEvent } from '@octokit/webhooks-types';
 import { createChildLogger } from '@terraform-aws-github-runner/aws-powertools-util';
-import { getParameterValue } from '@terraform-aws-github-runner/aws-ssm-util';
+import { getParameter } from '@terraform-aws-github-runner/aws-ssm-util';
 import { IncomingHttpHeaders } from 'http';
 
 import { Response } from '../lambda';
@@ -11,7 +11,7 @@ const supportedEvents = ['workflow_job'];
 const logger = createChildLogger('handler');
 
 export async function handle(headers: IncomingHttpHeaders, body: string): Promise<Response> {
-  const { environment, repositoryWhiteList, queuesConfig } = readEnvironmentVariables();
+  const { repositoryWhiteList, queuesConfig } = readEnvironmentVariables();
 
   // ensure header keys lower case since github headers can contain capitals.
   for (const key in headers) {
@@ -99,7 +99,7 @@ async function verifySignature(githubEvent: string, headers: IncomingHttpHeaders
     return 500;
   }
 
-  const secret = await getParameterValue(process.env.PARAMETER_GITHUB_APP_WEBHOOK_SECRET);
+  const secret = await getParameter(process.env.PARAMETER_GITHUB_APP_WEBHOOK_SECRET);
 
   const webhooks = new Webhooks({
     secret: secret,
@@ -158,7 +158,7 @@ function isRepoNotAllowed(repoFullName: string, repositoryWhiteList: string[]): 
   return repositoryWhiteList.length > 0 && !repositoryWhiteList.includes(repoFullName);
 }
 
-function canRunJob(
+export function canRunJob(
   workflowJobLabels: string[],
   runnerLabelsMatchers: string[][],
   workflowLabelCheckAll: boolean,
@@ -166,9 +166,10 @@ function canRunJob(
   runnerLabelsMatchers = runnerLabelsMatchers.map((runnerLabel) => {
     return runnerLabel.map((label) => label.toLowerCase());
   });
-  const match = workflowLabelCheckAll
-    ? workflowJobLabels.every((wl) => runnerLabelsMatchers.some((rl) => rl.includes(wl.toLowerCase())))
-    : workflowJobLabels.some((wl) => runnerLabelsMatchers.some((rl) => rl.includes(wl.toLowerCase())));
+  const matchLabels = workflowLabelCheckAll
+    ? runnerLabelsMatchers.some((rl) => workflowJobLabels.every((wl) => rl.includes(wl.toLowerCase())))
+    : runnerLabelsMatchers.some((rl) => workflowJobLabels.some((wl) => rl.includes(wl.toLowerCase())));
+  const match = workflowJobLabels.length === 0 ? !matchLabels : matchLabels;
 
   logger.debug(
     `Received workflow job event with labels: '${JSON.stringify(workflowJobLabels)}'. The event does ${

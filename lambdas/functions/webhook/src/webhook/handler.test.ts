@@ -1,5 +1,5 @@
 import { Webhooks } from '@octokit/webhooks';
-import { getParameterValue } from '@terraform-aws-github-runner/aws-ssm-util';
+import { getParameter } from '@terraform-aws-github-runner/aws-ssm-util';
 import { mocked } from 'jest-mock';
 import nock from 'nock';
 
@@ -7,7 +7,7 @@ import checkrun_event from '../../test/resources/github_check_run_event.json';
 import workflowjob_event from '../../test/resources/github_workflowjob_event.json';
 import queuesConfig from '../../test/resources/multi_runner_configurations.json';
 import { sendActionRequest } from '../sqs';
-import { handle } from './handler';
+import { canRunJob, handle } from './handler';
 
 jest.mock('../sqs');
 jest.mock('@terraform-aws-github-runner/aws-ssm-util');
@@ -41,7 +41,7 @@ describe('handler', () => {
     jest.clearAllMocks();
     jest.resetAllMocks();
 
-    const mockedGet = mocked(getParameterValue);
+    const mockedGet = mocked(getParameter);
     mockedGet.mockResolvedValueOnce(GITHUB_APP_WEBHOOK_SECRET);
   });
 
@@ -261,7 +261,35 @@ describe('handler', () => {
         event,
       );
       expect(resp.statusCode).toBe(202);
-      expect(sendActionRequest).not.toBeCalled;
+      expect(sendActionRequest).not.toBeCalled();
+    });
+
+    it('Check webhook does not accept jobs where the job labels are spread across label matchers.', async () => {
+      process.env.RUNNER_CONFIG = JSON.stringify([
+        {
+          ...queuesConfig[0],
+          matcherConfig: {
+            labelMatchers: [
+              ['self-hosted', 'x64', 'linux'],
+              ['self-hosted', 'x64', 'on-demand'],
+            ],
+            exactMatch: true,
+          },
+        },
+      ]);
+      const event = JSON.stringify({
+        ...workflowjob_event,
+        workflow_job: {
+          ...workflowjob_event.workflow_job,
+          labels: ['self-hosted', 'linux', 'x64', 'on-demand'],
+        },
+      });
+      const resp = await handle(
+        { 'X-Hub-Signature': await webhooks.sign(event), 'X-GitHub-Event': 'workflow_job' },
+        event,
+      );
+      expect(resp.statusCode).toBe(202);
+      expect(sendActionRequest).not.toBeCalled();
     });
 
     it('Check webhook does not accept jobs where not all labels are supported by the runner.', async () => {
@@ -293,7 +321,7 @@ describe('handler', () => {
         event,
       );
       expect(resp.statusCode).toBe(202);
-      expect(sendActionRequest).not.toBeCalled;
+      expect(sendActionRequest).not.toBeCalled();
     });
 
     it('Check webhook will accept jobs with a single acceptable label.', async () => {
@@ -357,7 +385,7 @@ describe('handler', () => {
         event,
       );
       expect(resp.statusCode).toBe(202);
-      expect(sendActionRequest).not.toBeCalled;
+      expect(sendActionRequest).not.toBeCalled();
     });
     it('Check webhook will accept jobs for specific labels if workflow labels are specific', async () => {
       process.env.RUNNER_CONFIG = JSON.stringify([
@@ -490,5 +518,56 @@ describe('handler', () => {
       expect(resp.statusCode).toBe(202);
       expect(sendActionRequest).toBeCalledTimes(0);
     });
+  });
+});
+
+describe('canRunJob', () => {
+  it('should accept job with an exact match and identical labels.', () => {
+    const workflowLabels = ['self-hosted', 'linux', 'x64', 'ubuntu-latest'];
+    const runnerLabels = [['self-hosted', 'linux', 'x64', 'ubuntu-latest']];
+    const exactMatch = true;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(true);
+  });
+
+  it('should accept job with an exact match and runner supports requested capabilites.', () => {
+    const workflowLabels = ['self-hosted', 'linux', 'x64'];
+    const runnerLabels = [['self-hosted', 'linux', 'x64', 'ubuntu-latest']];
+    const exactMatch = true;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(true);
+  });
+
+  it('should NOT accept job with an exact match and runner not matching requested capabilites.', () => {
+    const workflowLabels = ['self-hosted', 'linux', 'x64', 'ubuntu-latest'];
+    const runnerLabels = [['self-hosted', 'linux', 'x64']];
+    const exactMatch = true;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(false);
+  });
+
+  it('should accept job with for a non exact match. Any label that matches will accept the job.', () => {
+    const workflowLabels = ['self-hosted', 'linux', 'x64', 'ubuntu-latest', 'gpu'];
+    const runnerLabels = [['gpu']];
+    const exactMatch = false;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(true);
+  });
+
+  it('should NOT accept job with for an exact match. Not all requested capabilites are supported.', () => {
+    const workflowLabels = ['self-hosted', 'linux', 'x64', 'ubuntu-latest', 'gpu'];
+    const runnerLabels = [['gpu']];
+    const exactMatch = true;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(false);
+  });
+
+  it('Should not accecpt jobs not providing labels if exact match is.', () => {
+    const workflowLabels: string[] = [];
+    const runnerLabels = [['self-hosted', 'linux', 'x64']];
+    const exactMatch = true;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(false);
+  });
+
+  it('Should accept jobs not providing labels and exact match is set to false.', () => {
+    const workflowLabels: string[] = [];
+    const runnerLabels = [['self-hosted', 'linux', 'x64']];
+    const exactMatch = false;
+    expect(canRunJob(workflowLabels, runnerLabels, exactMatch)).toBe(true);
   });
 });

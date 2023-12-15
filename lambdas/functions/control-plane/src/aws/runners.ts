@@ -7,8 +7,8 @@ import {
   FleetLaunchTemplateOverridesRequest,
   TerminateInstancesCommand,
 } from '@aws-sdk/client-ec2';
-import { SSM } from '@aws-sdk/client-ssm';
 import { createChildLogger } from '@terraform-aws-github-runner/aws-powertools-util';
+import { getParameter } from '@terraform-aws-github-runner/aws-ssm-util';
 import moment from 'moment';
 
 import ScaleError from './../scale-runners/ScaleError';
@@ -41,8 +41,8 @@ function constructFilters(filters?: Runners.ListRunnerFilters): Ec2Filter[][] {
       ec2FiltersBase.push({ Name: 'tag:ghr:environment', Values: [filters.environment] });
     }
     if (filters.runnerType && filters.runnerOwner) {
-      ec2FiltersBase.push({ Name: `tag:Type`, Values: [filters.runnerType] });
-      ec2FiltersBase.push({ Name: `tag:Owner`, Values: [filters.runnerOwner] });
+      ec2FiltersBase.push({ Name: `tag:ghr:Type`, Values: [filters.runnerType] });
+      ec2FiltersBase.push({ Name: `tag:ghr:Owner`, Values: [filters.runnerOwner] });
     }
   }
 
@@ -79,10 +79,10 @@ function getRunnerInfo(runningInstances: DescribeInstancesResult) {
           runners.push({
             instanceId: i.InstanceId as string,
             launchTime: i.LaunchTime,
-            owner: i.Tags?.find((e) => e.Key === 'Owner')?.Value as string,
-            type: i.Tags?.find((e) => e.Key === 'Type')?.Value as string,
-            repo: i.Tags?.find((e) => e.Key === 'Repo')?.Value as string,
-            org: i.Tags?.find((e) => e.Key === 'Org')?.Value as string,
+            owner: i.Tags?.find((e) => e.Key === 'ghr:Owner')?.Value as string,
+            type: i.Tags?.find((e) => e.Key === 'ghr:Type')?.Value as string,
+            repo: i.Tags?.find((e) => e.Key === 'ghr:Repo')?.Value as string,
+            org: i.Tags?.find((e) => e.Key === 'ghr:Org')?.Value as string,
           });
         }
       }
@@ -116,36 +116,22 @@ function generateFleetOverrides(
   return result;
 }
 
-function removeTokenForLogging(config: string[]): string[] {
-  const result: string[] = [];
-  config.forEach((e) => {
-    if (e.startsWith('--token')) {
-      result.push('--token <REDACTED>');
-    } else {
-      result.push(e);
-    }
-  });
-  return result;
-}
-
-export async function createRunner(runnerParameters: Runners.RunnerInputParameters): Promise<void> {
+export async function createRunner(runnerParameters: Runners.RunnerInputParameters): Promise<string[]> {
   logger.debug('Runner configuration.', {
     runner: {
       configuration: {
         ...runnerParameters,
-        runnerServiceConfig: removeTokenForLogging(runnerParameters.runnerServiceConfig),
       },
     },
   });
 
-  const ec2Clinnt = new EC2Client({ region: process.env.AWS_REGION });
-  const ssmClient = new SSM({ region: process.env.AWS_REGION });
+  const ec2Client = new EC2Client({ region: process.env.AWS_REGION });
 
   let amiIdOverride = undefined;
 
   if (runnerParameters.amiIdSsmParameterName) {
     try {
-      amiIdOverride = (await ssmClient.getParameter({ Name: runnerParameters.amiIdSsmParameterName })).Parameter?.Value;
+      amiIdOverride = await getParameter(runnerParameters.amiIdSsmParameterName);
       logger.debug(`AMI override SSM parameter (${runnerParameters.amiIdSsmParameterName}) set to: ${amiIdOverride}`);
     } catch (e) {
       logger.error(
@@ -158,6 +144,12 @@ export async function createRunner(runnerParameters: Runners.RunnerInputParamete
   }
 
   const numberOfRunners = runnerParameters.numberOfRunners ? runnerParameters.numberOfRunners : 1;
+  const tags = [
+    { Key: 'ghr:Application', Value: 'github-action-runner' },
+    { Key: 'ghr:created_by', Value: numberOfRunners === 1 ? 'scale-up-lambda' : 'pool-lambda' },
+    { Key: 'ghr:Type', Value: runnerParameters.runnerType },
+    { Key: 'ghr:Owner', Value: runnerParameters.runnerOwner },
+  ];
 
   let fleet: CreateFleetResult;
   try {
@@ -187,17 +179,16 @@ export async function createRunner(runnerParameters: Runners.RunnerInputParamete
       TagSpecifications: [
         {
           ResourceType: 'instance',
-          Tags: [
-            { Key: 'ghr:Application', Value: 'github-action-runner' },
-            { Key: 'ghr:created_by', Value: numberOfRunners === 1 ? 'scale-up-lambda' : 'pool-lambda' },
-            { Key: 'Type', Value: runnerParameters.runnerType },
-            { Key: 'Owner', Value: runnerParameters.runnerOwner },
-          ],
+          Tags: tags,
+        },
+        {
+          ResourceType: 'volume',
+          Tags: tags,
         },
       ],
       Type: 'instant',
     });
-    fleet = await ec2Clinnt.send(createFleetCommand);
+    fleet = await ec2Client.send(createFleetCommand);
   } catch (e) {
     logger.warn('Create fleet request failed.', { error: e as Error });
     throw e;
@@ -234,22 +225,7 @@ export async function createRunner(runnerParameters: Runners.RunnerInputParamete
 
   logger.info(`Created instance(s): ${instances.join(',')}`);
 
-  const delay = async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  const ssmParameterStoreMaxThroughput = 40;
-  const isDelay = instances.length >= ssmParameterStoreMaxThroughput ? true : false;
-
-  for (const instance of instances) {
-    await ssmClient.putParameter({
-      Name: `${runnerParameters.ssmTokenPath}/${instance}`,
-      Value: runnerParameters.runnerServiceConfig.join(' '),
-      Type: 'SecureString',
-    });
-
-    if (isDelay) {
-      // Delay to prevent AWS ssm rate limits by being within the max throughput limit
-      await delay(25);
-    }
-  }
+  return instances;
 }
 
 // If launchTime is undefined, this will return false

@@ -19,6 +19,7 @@ resource "aws_lambda_function" "scale_up" {
       AMI_ID_SSM_PARAMETER_NAME            = var.ami_id_ssm_parameter_name
       DISABLE_RUNNER_AUTOUPDATE            = var.disable_runner_autoupdate
       ENABLE_EPHEMERAL_RUNNERS             = var.enable_ephemeral_runners
+      ENABLE_JIT_CONFIG                    = var.enable_jit_config
       ENABLE_JOB_QUEUED_CHECK              = local.enable_job_queued_check
       ENABLE_ORGANIZATION_RUNNERS          = var.enable_organization_runners
       ENVIRONMENT                          = var.prefix
@@ -34,12 +35,13 @@ resource "aws_lambda_function" "scale_up" {
       PARAMETER_GITHUB_APP_ID_NAME         = var.github_app_parameters.id.name
       PARAMETER_GITHUB_APP_KEY_BASE64_NAME = var.github_app_parameters.key_base64.name
       POWERTOOLS_LOGGER_LOG_EVENT          = var.log_level == "debug" ? "true" : "false"
-      RUNNER_EXTRA_LABELS                  = lower(var.runner_extra_labels)
+      RUNNER_LABELS                        = lower(var.runner_labels)
       RUNNER_GROUP_NAME                    = var.runner_group_name
       RUNNER_NAME_PREFIX                   = var.runner_name_prefix
       RUNNERS_MAXIMUM_COUNT                = var.runners_maximum_count
       SERVICE_NAME                         = "runners-scale-up"
       SSM_TOKEN_PATH                       = "${var.ssm_paths.root}/${var.ssm_paths.tokens}"
+      SSM_CONFIG_PATH                      = "${var.ssm_paths.root}/${var.ssm_paths.config}"
       SUBNET_IDS                           = join(",", var.subnet_ids)
     }
   }
@@ -97,6 +99,7 @@ resource "aws_iam_role_policy" "scale_up" {
     sqs_arn                   = var.sqs_build_queue.arn
     github_app_id_arn         = var.github_app_parameters.id.arn
     github_app_key_base64_arn = var.github_app_parameters.key_base64.arn
+    ssm_config_path           = "arn:${var.aws_partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_paths.root}/${var.ssm_paths.config}"
     kms_key_arn               = local.kms_key_arn
     ami_kms_key_arn           = local.ami_kms_key_arn
   })
@@ -116,14 +119,6 @@ resource "aws_iam_role_policy" "service_linked_role" {
   name   = "${var.prefix}-service_linked_role"
   role   = aws_iam_role.scale_up.name
   policy = templatefile("${path.module}/policies/service-linked-role-create-policy.json", { aws_partition = var.aws_partition })
-}
-
-resource "aws_iam_role_policy" "lambda_scale_up_vpc" {
-  count = length(var.lambda_subnet_ids) > 0 && length(var.lambda_security_group_ids) > 0 ? 1 : 0
-  name  = "${var.prefix}-lambda-scale-up-vpc"
-  role  = aws_iam_role.scale_up.id
-
-  policy = file("${path.module}/policies/lambda-vpc.json")
 }
 
 resource "aws_iam_role_policy_attachment" "scale_up_vpc_execution_role" {

@@ -73,6 +73,12 @@ variable "block_device_mappings" {
   }]
 }
 
+variable "ebs_optimized" {
+  description = "The EC2 EBS optimized configuration."
+  type        = bool
+  default     = false
+}
+
 variable "instance_target_capacity_type" {
   description = "Default lifecyle used runner instances, can be either `spot` or `on-demand`."
   type        = string
@@ -127,7 +133,12 @@ variable "instance_types" {
 variable "ami_filter" {
   description = "Map of lists used to create the AMI filter for the action runner AMI."
   type        = map(list(string))
-  default     = null
+  default     = { state = ["available"] }
+  validation {
+    // check the availability of the AMI
+    condition     = contains(keys(var.ami_filter), "state")
+    error_message = "The \"ami_filter\" variable must contain the \"state\" key with the value \"available\"."
+  }
 }
 
 variable "ami_owners" {
@@ -209,10 +220,9 @@ variable "runner_boot_time_in_minutes" {
   default     = 5
 }
 
-variable "runner_extra_labels" {
-  description = "Extra labels for the runners (GitHub). Separate each label by a comma"
+variable "runner_labels" {
+  description = "All the labels for the runners (GitHub) including the default one's(e.g: self-hosted, linux, x64, label1, label2). Separate each label by a comma"
   type        = string
-  default     = ""
 }
 
 variable "runner_group_name" {
@@ -290,9 +300,10 @@ variable "runner_architecture" {
 variable "idle_config" {
   description = "List of time period that can be defined as cron expression to keep a minimum amount of runners active instead of scaling down to 0. By defining this list you can ensure that in time periods that match the cron expression within 5 seconds a runner is kept idle."
   type = list(object({
-    cron      = string
-    timeZone  = string
-    idleCount = number
+    cron             = string
+    timeZone         = string
+    idleCount        = number
+    evictionStrategy = optional(string, "oldest_first")
   }))
   default = []
 }
@@ -493,7 +504,7 @@ variable "metadata_options" {
   default = {
     instance_metadata_tags      = "enabled"
     http_endpoint               = "enabled"
-    http_tokens                 = "optional"
+    http_tokens                 = "required"
     http_put_response_hop_limit = 1
   }
 }
@@ -538,7 +549,7 @@ variable "pool_config" {
 }
 
 variable "disable_runner_autoupdate" {
-  description = "Disable the auto update of the github runner agent. Be-aware there is a grace period of 30 days, see also the [GitHub article](https://github.blog/changelog/2022-02-01-github-actions-self-hosted-runners-can-now-disable-automatic-updates/)"
+  description = "Disable the auto update of the github runner agent. Be aware there is a grace period of 30 days, see also the [GitHub article](https://github.blog/changelog/2022-02-01-github-actions-self-hosted-runners-can-now-disable-automatic-updates/)"
   type        = bool
   default     = false
 }
@@ -604,4 +615,16 @@ variable "credit_specification" {
     condition     = var.credit_specification == null ? true : contains(["standard", "unlimited"], var.credit_specification)
     error_message = "Valid values for credit_specification are (null, \"standard\", \"unlimited\")."
   }
+}
+
+variable "enable_jit_config" {
+  description = "Overwrite the default behavior for JIT configuration. By default JIT configuration is enabled for ephemeral runners and disabled for non-ephemeral runners. In case of GHES check first if the JIT config API is avaialbe. In case you upgradeing from 3.x to 4.x you can set `enable_jit_config` to `false` to avoid a breaking change when having your own AMI."
+  type        = bool
+  default     = null
+}
+
+variable "associate_public_ipv4_address" {
+  description = "Associate public IPv4 with the runner. Only tested with IPv4"
+  type        = bool
+  default     = false
 }

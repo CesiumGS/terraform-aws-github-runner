@@ -21,20 +21,19 @@ terraform init
 terraform apply
 ```
 
-You can receive the webhook details by running:
+The module will try to update the GitHub App webhook and secret (only linux/mac). You can receive the webhook details by running:
 
 ```bash
-terraform output -raw webhook_secret
+terraform output webhook_secret
 ```
 
-Be-aware some shells will print some end of line character `%`. 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | ~> 4.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | ~> 5.2 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -42,7 +41,7 @@ Be-aware some shells will print some end of line character `%`.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_random"></a> [random](#provider\_random) | 3.4.3 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.5.1 |
 
 ## Modules
 
@@ -50,6 +49,7 @@ Be-aware some shells will print some end of line character `%`.
 |------|--------|---------|
 | <a name="module_base"></a> [base](#module\_base) | ../base | n/a |
 | <a name="module_runners"></a> [runners](#module\_runners) | ../../ | n/a |
+| <a name="module_webhook-github-app"></a> [webhook-github-app](#module\_webhook-github-app) | ../../modules/webhook-github-app | n/a |
 
 ## Resources
 

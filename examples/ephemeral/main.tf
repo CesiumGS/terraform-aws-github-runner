@@ -71,7 +71,7 @@ module "runners" {
 
   # configure your pre-built AMI
   # enable_userdata = false
-  # ami_filter       = { name = ["github-runner-amzn2-x86_64-*"] }
+  # ami_filter       = { name = ["github-runner-amzn2-x86_64-*"], state = ["available"] }
   # data "aws_caller_identity" "current" {}
   # ami_owners       = [data.aws_caller_identity.current.account_id]
 
@@ -84,4 +84,16 @@ module "runners" {
   #   maxReceiveCount     = 50 # 50 retries every 30 seconds => 25 minutes
   #   deadLetterTargetArn = null
   # }
+}
+
+module "webhook-github-app" {
+  source     = "../../modules/webhook-github-app"
+  depends_on = [module.runners]
+
+  github_app = {
+    key_base64     = var.github_app.key_base64
+    id             = var.github_app.id
+    webhook_secret = random_id.random.hex
+  }
+  webhook_endpoint = module.runners.webhook.endpoint
 }

@@ -208,6 +208,7 @@ module "runners" {
   github_app_parameters                = local.github_app_parameters
   enable_organization_runners          = var.enable_organization_runners
   enable_ephemeral_runners             = var.enable_ephemeral_runners
+  enable_jit_config                    = var.enable_jit_config
   enable_job_queued_check              = var.enable_job_queued_check
   disable_runner_autoupdate            = var.disable_runner_autoupdate
   enable_managed_runner_security_group = var.enable_managed_runner_security_group
@@ -215,7 +216,7 @@ module "runners" {
   scale_down_schedule_expression       = var.scale_down_schedule_expression
   minimum_running_time_in_minutes      = var.minimum_running_time_in_minutes
   runner_boot_time_in_minutes          = var.runner_boot_time_in_minutes
-  runner_extra_labels                  = var.runner_extra_labels
+  runner_labels                        = local.runner_labels
   runner_as_root                       = var.runner_as_root
   runner_run_as                        = var.runner_run_as
   runners_maximum_count                = var.runners_maximum_count

@@ -12,12 +12,20 @@ resource "random_id" "random" {
 ### Hybrid account
 ################################################################################
 
+module "base" {
+  source = "../base"
+
+  prefix     = local.environment
+  aws_region = local.aws_region
+}
+
+
 module "runners" {
   source                          = "../../"
   create_service_linked_role_spot = true
   aws_region                      = local.aws_region
-  vpc_id                          = module.vpc.vpc_id
-  subnet_ids                      = module.vpc.private_subnets
+  vpc_id                          = module.base.vpc.vpc_id
+  subnet_ids                      = module.base.vpc.private_subnets
 
   prefix = local.environment
   tags = {
@@ -77,4 +85,15 @@ module "runners" {
 
   # override scaling down
   scale_down_schedule_expression = "cron(* * * * ? *)"
+}
+
+module "webhook-github-app" {
+  source = "../../modules/webhook-github-app"
+
+  github_app = {
+    key_base64     = var.github_app.key_base64
+    id             = var.github_app.id
+    webhook_secret = random_id.random.hex
+  }
+  webhook_endpoint = module.runners.webhook.endpoint
 }

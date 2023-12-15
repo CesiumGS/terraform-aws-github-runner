@@ -32,7 +32,7 @@ resource "aws_lambda_function" "scale_down" {
       POWERTOOLS_LOGGER_LOG_EVENT          = var.log_level == "debug" ? "true" : "false"
       RUNNER_BOOT_TIME_IN_MINUTES          = var.runner_boot_time_in_minutes
       SCALE_DOWN_CONFIG                    = jsonencode(var.idle_config)
-      SERVICE_NAME                         = "runners-scale-up"
+      SERVICE_NAME                         = "runners-scale-down"
     }
   }
 
@@ -102,14 +102,6 @@ resource "aws_iam_role_policy" "scale_down_logging" {
   policy = templatefile("${path.module}/policies/lambda-cloudwatch.json", {
     log_group_arn = aws_cloudwatch_log_group.scale_down.arn
   })
-}
-
-resource "aws_iam_role_policy" "lambda_scale_down_vpc" {
-  count = length(var.lambda_subnet_ids) > 0 && length(var.lambda_security_group_ids) > 0 ? 1 : 0
-  name  = "${var.prefix}-lambda-scale-down-vpc"
-  role  = aws_iam_role.scale_down.id
-
-  policy = file("${path.module}/policies/lambda-vpc.json")
 }
 
 resource "aws_iam_role_policy_attachment" "scale_down_vpc_execution_role" {

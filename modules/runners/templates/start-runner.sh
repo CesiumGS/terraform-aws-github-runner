@@ -3,7 +3,19 @@
 ## Retrieve instance metadata
 
 echo "Retrieving TOKEN from AWS API"
-token=$(curl -f -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 180")
+token=$(curl -f -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 180" || true)
+if [ -z "$token" ]; then
+  retrycount=0
+  until [ -n "$token" ]; do
+    echo "Failed to retrieve token. Retrying in 5 seconds."
+    sleep 5
+    token=$(curl -f -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 180" || true)
+    retrycount=$((retrycount + 1))
+    if [ $retrycount -gt 40 ]; then
+      break
+    fi
+  done
+fi
 
 ami_id=$(curl -f -H "X-aws-ec2-metadata-token: $token" -v http://169.254.169.254/latest/meta-data/ami-id)
 
@@ -47,6 +59,9 @@ echo "Retrieved /$ssm_config_path/enable_cloudwatch parameter - ($enable_cloudwa
 agent_mode=$(echo "$parameters" | jq --arg ssm_config_path "$ssm_config_path" -r '.[] | select(.Name == "'$ssm_config_path'/agent_mode") | .Value')
 echo "Retrieved /$ssm_config_path/agent_mode parameter - ($agent_mode)"
 
+enable_jit_config=$(echo "$parameters" | jq --arg ssm_config_path "$ssm_config_path" -r '.[] | select(.Name == "'$ssm_config_path'/enable_jit_config") | .Value')
+echo "Retrieved /$ssm_config_path/enable_jit_config parameter - ($enable_jit_config)"
+
 token_path=$(echo "$parameters" | jq --arg ssm_config_path "$ssm_config_path" -r '.[] | select(.Name == "'$ssm_config_path'/token_path") | .Value')
 echo "Retrieved /$ssm_config_path/token_path parameter - ($token_path)"
 
@@ -80,9 +95,6 @@ fi
 
 chown -R $run_as .
 
-echo "Configure GH Runner as user $run_as"
-sudo --preserve-env=RUNNER_ALLOW_RUNASROOT -u "$run_as" -- ./config.sh --unattended --name "$runner_name_prefix$instance_id" --work "_work" $${config}
-
 info_arch=$(uname -p)
 info_os=$(( lsb_release -ds || cat /etc/*release || uname -om ) 2>/dev/null | head -n1 | cut -d "=" -f2- | tr -d '"')
 
@@ -108,11 +120,26 @@ EOL
 echo "Starting runner after $(awk '{print int($1/3600)":"int(($1%3600)/60)":"int($1%60)}' /proc/uptime)"
 echo "Starting the runner as user $run_as"
 
+# configure the runner if the runner is non ephemeral or jit config is disabled
+if [[ "$enable_jit_config" == "false" || $agent_mode != "ephemeral" ]]; then
+  echo "Configure GH Runner as user $run_as"
+  sudo --preserve-env=RUNNER_ALLOW_RUNASROOT -u "$run_as" -- ./config.sh --unattended --name "$runner_name_prefix$instance_id" --work "_work" $${config}
+fi
+
 if [[ $agent_mode = "ephemeral" ]]; then
 
 cat >/opt/start-runner-service.sh <<-EOF
+
   echo "Starting the runner in ephemeral mode"
-  sudo --preserve-env=RUNNER_ALLOW_RUNASROOT -u "$run_as" -- ./run.sh
+
+  if [[ "$enable_jit_config" == "true" ]]; then
+    echo "Starting with JIT config"
+    sudo --preserve-env=RUNNER_ALLOW_RUNASROOT -u "$run_as" -- ./run.sh --jitconfig $${config}
+  else
+    echo "Starting without JIT config"
+    sudo --preserve-env=RUNNER_ALLOW_RUNASROOT -u "$run_as" -- ./run.sh
+  fi
+
   echo "Runner has finished"
 
   echo "Stopping cloudwatch service"
@@ -120,9 +147,8 @@ cat >/opt/start-runner-service.sh <<-EOF
   echo "Terminating instance"
   aws ec2 terminate-instances --instance-ids "$instance_id" --region "$region"
 EOF
-  chmod 755 /opt/start-runner-service.sh
   # Starting the runner via a own process to ensure this process terminates
-  nohup /opt/start-runner-service.sh &
+  nohup bash /opt/start-runner-service.sh &
 
 else
   echo "Installing the runner as a service"

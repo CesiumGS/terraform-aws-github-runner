@@ -12,6 +12,7 @@ resource "aws_iam_instance_profile" "runner" {
   name = "${var.prefix}-runner-profile"
   role = aws_iam_role.runner.name
   path = local.instance_profile_path
+  tags = local.tags
 }
 
 resource "aws_iam_role_policy" "runner_session_manager_aws_managed" {
@@ -27,7 +28,7 @@ resource "aws_iam_role_policy" "ssm_parameters" {
   policy = templatefile("${path.module}/policies/instance-ssm-parameters-policy.json",
     {
       arn_ssm_parameters_path_tokens = "arn:${var.aws_partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_paths.root}/${var.ssm_paths.tokens}"
-      arn_ssm_parameters_path_config = "arn:${var.aws_partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_paths.root}/${var.ssm_paths.config}"
+      arn_ssm_parameters_path_config = local.arn_ssm_parameters_path_config
     }
   )
 }

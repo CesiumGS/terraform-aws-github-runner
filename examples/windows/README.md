@@ -25,13 +25,19 @@ terraform apply
 
 _**Note**_: It can take upwards of ten minutes for a runner to start processing jobs, and about as long for logs to start showing up. It's recommend that scale the runners via a warm-up job and then keep them idled.
 
+The module will try to update the GitHub App webhook and secret (only linux/mac). You can receive the webhook details by running:
+
+```bash
+terraform output webhook_secret
+```
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | ~> 4.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | ~> 5.2 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -39,7 +45,7 @@ _**Note**_: It can take upwards of ten minutes for a runner to start processing 
 
 | Name | Version |
 |------|---------|
-| <a name="provider_random"></a> [random](#provider\_random) | 3.4.3 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.5.1 |
 
 ## Modules
 
@@ -47,6 +53,7 @@ _**Note**_: It can take upwards of ten minutes for a runner to start processing 
 |------|--------|---------|
 | <a name="module_base"></a> [base](#module\_base) | ../base | n/a |
 | <a name="module_runners"></a> [runners](#module\_runners) | ../../ | n/a |
+| <a name="module_webhook-github-app"></a> [webhook-github-app](#module\_webhook-github-app) | ../../modules/webhook-github-app | n/a |
 
 ## Resources
 

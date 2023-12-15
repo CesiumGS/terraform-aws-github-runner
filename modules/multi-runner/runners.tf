@@ -33,8 +33,10 @@ module "runners" {
 
   sqs_build_queue                      = { "arn" : each.value.arn }
   github_app_parameters                = local.github_app_parameters
+  ebs_optimized                        = each.value.runner_config.ebs_optimized
   enable_organization_runners          = each.value.runner_config.enable_organization_runners
   enable_ephemeral_runners             = each.value.runner_config.enable_ephemeral_runners
+  enable_jit_config                    = each.value.runner_config.enable_jit_config
   enable_job_queued_check              = each.value.runner_config.enable_job_queued_check
   disable_runner_autoupdate            = each.value.runner_config.disable_runner_autoupdate
   enable_managed_runner_security_group = var.enable_managed_runner_security_group
@@ -42,14 +44,14 @@ module "runners" {
   scale_down_schedule_expression       = each.value.runner_config.scale_down_schedule_expression
   minimum_running_time_in_minutes      = each.value.runner_config.minimum_running_time_in_minutes
   runner_boot_time_in_minutes          = each.value.runner_config.runner_boot_time_in_minutes
-  runner_extra_labels                  = each.value.runner_config.runner_extra_labels
+  runner_labels                        = "self-hosted,${each.value.runner_config.runner_os},${each.value.runner_config.runner_architecture},${each.value.runner_config.runner_extra_labels}"
   runner_as_root                       = each.value.runner_config.runner_as_root
   runner_run_as                        = each.value.runner_config.runner_run_as
   runners_maximum_count                = each.value.runner_config.runners_maximum_count
   idle_config                          = each.value.runner_config.idle_config
   enable_ssm_on_runners                = each.value.runner_config.enable_ssm_on_runners
   egress_rules                         = var.runner_egress_rules
-  runner_additional_security_group_ids = var.runner_additional_security_group_ids
+  runner_additional_security_group_ids = try(coalescelist(each.value.runner_config.runner_additional_security_group_ids, var.runner_additional_security_group_ids), [])
   metadata_options                     = each.value.runner_config.runner_metadata_options
   credit_specification                 = each.value.runner_config.credit_specification
 
@@ -68,7 +70,7 @@ module "runners" {
   logging_retention_in_days        = var.logging_retention_in_days
   logging_kms_key_id               = var.logging_kms_key_id
   enable_cloudwatch_agent          = each.value.runner_config.enable_cloudwatch_agent
-  cloudwatch_config                = var.cloudwatch_config
+  cloudwatch_config                = try(coalesce(each.value.runner_config.cloudwatch_config, var.cloudwatch_config), null)
   runner_log_files                 = each.value.runner_config.runner_log_files
   runner_group_name                = each.value.runner_config.runner_group_name
   runner_name_prefix               = each.value.runner_config.runner_name_prefix
@@ -101,4 +103,5 @@ module "runners" {
   pool_lambda_timeout                        = var.pool_lambda_timeout
   pool_runner_owner                          = each.value.runner_config.pool_runner_owner
   pool_lambda_reserved_concurrent_executions = var.pool_lambda_reserved_concurrent_executions
+  associate_public_ipv4_address              = var.associate_public_ipv4_address
 }

@@ -14,10 +14,10 @@ jobs:
       contents: write
       actions: write
     steps:
-      - uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+      - uses: actions/setup-node@5e21ff4d9bc1a8cf6de233a3057d20ec6b3fb69d # v3.8.1
         with:
-          node-version: 16
-      - uses: actions/checkout@24cb9080177205b6e8c946b17badbe402adc938f # ratchet:actions/checkout@v3
+          node-version: 18
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # ratchet:actions/checkout@v4
       - name: Build dist
         working-directory: lambdas
         run: yarn install && yarn run test && yarn dist
@@ -34,7 +34,7 @@ jobs:
         run: echo "name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
       - name: Release
         id: release
-        uses: google-github-actions/release-please-action@c078ea33917ab8cfa5300e48f4b7e6b16606aede # ratchet:google-github-actions/release-please-action@v3
+        uses: google-github-actions/release-please-action@4c5670f886fe259db4d11222f7dff41c1382304d # ratchet:google-github-actions/release-please-action@v3
         with:
           default-branch: ${{ steps.branch.outputs.name }}
           release-type: terraform-module
