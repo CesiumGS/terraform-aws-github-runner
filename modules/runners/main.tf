@@ -62,8 +62,6 @@ data "aws_ami" "runner" {
 resource "aws_launch_template" "runner" {
   name = "${var.prefix}-action-runner"
 
-  ebs_optimized = true
-
   dynamic "block_device_mappings" {
     for_each = var.block_device_mappings != null ? var.block_device_mappings : []
     content {
