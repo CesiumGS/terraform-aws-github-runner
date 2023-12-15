@@ -45,6 +45,12 @@ resource "aws_iam_role_policy" "dist_bucket" {
   )
 }
 
+resource "aws_iam_role_policy_attachment" "xray_tracing" {
+  count      = var.tracing_config.mode != null ? 1 : 0
+  role       = aws_iam_role.runner.name
+  policy_arn = "arn:${var.aws_partition}:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 resource "aws_iam_role_policy" "describe_tags" {
   name   = "runner-describe-tags"
   role   = aws_iam_role.runner.name
@@ -64,4 +70,4 @@ resource "aws_iam_role_policy" "ec2" {
   policy = templatefile("${path.module}/policies/instance-ec2.json", {})
 }
 
-// see also logging.tf for logging and metrics policies
+# see also logging.tf for logging and metrics policies
